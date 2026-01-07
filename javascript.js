@@ -4,7 +4,7 @@ const ctx = canvas.getContext('2d');
 
 //asociar la imagen de los tiles
 const tileMap = new Image();
-tileMap.src = 'SPRITES/pac man tiles/dm_google_pacman.bmp';
+tileMap.src = 'SPRITES/pac man tiles/dm_google_pacman.png';
 
 //crear la matriz que define el mapa del juego
 const maze = [
@@ -16,7 +16,7 @@ tileMap.onload = () => {
     drawMaze(); // solo dibujar cuando la imagen esté lista
 };
 
-//métodos para dibujar los tiles
+//métodos para dibujar los tiles, cada tile es de 32
 function drawTile(tile, x, y) {
     let sx, sy;
     const tileSize = 16;
@@ -24,9 +24,10 @@ function drawTile(tile, x, y) {
     // definir posición del tile en el sprite sheet
     switch (tile) {
 
-        case 0: sx = 16; sy = 16; break; // camino vacio
-        case 1: sx = 2*16; sy = 16; break; // camino con pildora
-        case 2: sx = 32+16, sy = 16; break;
+        case 0: sx = 32; sy = 0; break; // camino vacio
+        case 1: sx = 8*32; sy = 0; break; // camino con pildora pequeña
+        case 2: sx = 9*32; sy = 0; break; // camino con pildora grande
+        default: sx = 0; sy = 0; break; // default (tile de error)
 
     }
 
