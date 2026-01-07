@@ -1,60 +1,55 @@
-const tileSize = 40; // tamaño de cada celda
-
+//hacer variables de los elementos del juego
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-let pacman = { x: 1, y: 1, dir: 'RIGHT' }; // posición inicial
+//asociar la imagen de los tiles
+const tileMap = new Image();
+tileMap.src = 'SPRITES/pac man tiles/dm_google_pacman.bmp';
 
+//crear la matriz que define el mapa del juego
+const maze = [
+    [0,1,2,3,4,5]
+];
+
+// === BUCLE PRINCIPAL DEL JUEGO ===
+tileMap.onload = () => {
+    drawMaze(); // solo dibujar cuando la imagen esté lista
+};
+
+//métodos para dibujar los tiles
+function drawTile(tile, x, y) {
+    let sx, sy;
+    const tileSize = 16;
+
+    // definir posición del tile en el sprite sheet
+    switch (tile) {
+
+        case 0: sx = 16; sy = 16; break; // camino vacio
+        case 1: sx = 2*16; sy = 16; break; // camino con pildora
+        case 2: sx = 32+16, sy = 16; break;
+
+    }
+
+    ctx.drawImage(
+        tileMap,
+        sx, sy, tileSize, tileSize, // sección del sprite sheet
+        x * tileSize, y * tileSize, tileSize, tileSize // posición en canvas
+    );
+}
+
+// dibujar todo el mapa
 function drawMaze() {
     for (let y = 0; y < maze.length; y++) {
         for (let x = 0; x < maze[y].length; x++) {
-            if (maze[y][x] === 1) {
-                ctx.fillStyle = 'blue'; // pared
-                ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
-            } else {
-                ctx.fillStyle = 'black'; // espacio vacío
-                ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
-                ctx.fillStyle = 'yellow'; // píldora
-                ctx.beginPath();
-                ctx.arc(x * tileSize + tileSize/2, y * tileSize + tileSize/2, 5, 0, Math.PI*2);
-                ctx.fill();
-            }
+            drawTile(maze[y][x], x, y);
         }
     }
 }
 
-function drawPacman() {
-    ctx.fillStyle = 'yellow';
-    ctx.beginPath();
-    ctx.arc(pacman.x * tileSize + tileSize/2, pacman.y * tileSize + tileSize/2, tileSize/2 - 2, 0, Math.PI*2);
-    ctx.fill();
-}
-
-function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawMaze();
-    drawPacman();
-    requestAnimationFrame(gameLoop);
-}
-
-gameLoop();
-
+//movimiento de pacman
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowUp' && maze[pacman.y-1][pacman.x] !== 1) pacman.y--;
-    if (e.key === 'ArrowDown' && maze[pacman.y+1][pacman.x] !== 1) pacman.y++;
-    if (e.key === 'ArrowLeft' && maze[pacman.y][pacman.x-1] !== 1) pacman.x--;
-    if (e.key === 'ArrowRight' && maze[pacman.y][pacman.x+1] !== 1) pacman.x++;
+    if (e.key === 'ArrowUp' && maze[pacman.y - 1][pacman.x] !== 1) pacman.y--;
+    if (e.key === 'ArrowDown' && maze[pacman.y + 1][pacman.x] !== 1) pacman.y++;
+    if (e.key === 'ArrowLeft' && maze[pacman.y][pacman.x - 1] !== 1) pacman.x--;
+    if (e.key === 'ArrowRight' && maze[pacman.y][pacman.x + 1] !== 1) pacman.x++;
 });
-
-let ghosts = [
-    {x: 8, y: 1, dir: 'LEFT', color: 'red'},
-];
-
-function drawGhosts() {
-    ghosts.forEach(g => {
-        ctx.fillStyle = g.color;
-        ctx.beginPath();
-        ctx.arc(g.x * tileSize + tileSize/2, g.y * tileSize + tileSize/2, tileSize/2 - 2, 0, Math.PI*2);
-        ctx.fill();
-    });
-}
