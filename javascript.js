@@ -9,7 +9,8 @@ const TILE_SIZE = 32; //cada tile es de 32x32
 canvas.tabIndex = 0;
 canvas.focus();
 
-// Ajuste responsivo: escala el canvas (CSS) para que quepa en la ventana
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// === AJUSTAR EL CANVAS A LA VENTANA ===
 function resizeCanvasToWindow() {
     if (typeof maze === 'undefined' || !maze || !maze[0]) return;
     const cols = maze[0].length;
@@ -45,6 +46,24 @@ const pacman = {
     frameTimer: 0,
     speed: 80 // píxeles por segundo
 }
+
+//función para crear fantasmas
+function createGhost({ x, y, color, animations }) {
+    return {
+        x,
+        y,
+        px: x * TILE_SIZE,
+        py: y * TILE_SIZE,
+        direction: 'left',
+        animation: 'left',
+        animations,
+        frameIndex: 0,
+        frameTimer: 0,
+        speed: 0 
+    };
+}
+
+// (las instancias de fantasmas se crean más abajo, después de definir las animaciones)
 
 pacman.nextDirection = pacman.direction;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -124,6 +143,7 @@ const tiles = {
     77: loadImage('SPRITES/pac man tiles/tile077.png'), //OBSTACULO2 cierre vertical arriba
     78: loadImage('SPRITES/pac man tiles/tile078.png') //OBSTACULO2 cierre vertical abajo
 }
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === ANIMACIONES ===
 //animaciones de pacman
@@ -188,7 +208,174 @@ const pacmanAnimations = {
     }
 }
 
+//animaciones de blue
+const blueAnimations = {
+    right: {
+        frames: [
+            loadImage('SPRITES/blue/blue_right1.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    left: {
+        frames: [
+            loadImage('SPRITES/blue/blue_left1.png'),
+            loadImage('SPRITES/blue/blue_left2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    up: {
+        frames: [
+            loadImage('SPRITES/blue/blue_up1.png'),
+            loadImage('SPRITES/blue/blue_up2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    down: {
+        frames: [
+            loadImage('SPRITES/blue/blue_down1.png'),
+            loadImage('SPRITES/blue/blue_down2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    }
+}
+
+//animaciones de orange
+const ornageAnimations = {
+    right: {
+        frames: [
+            loadImage('SPRITES/orange/orange_right1.png'),
+            loadImage('SPRITES/orange/orange_right2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    left: {
+        frames: [
+            loadImage('SPRITES/orange/orange_left1.png'),
+            loadImage('SPRITES/orange/orange_left2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    up: {
+        frames: [
+            loadImage('SPRITES/orange/orange_up1.png'),
+            loadImage('SPRITES/orange/orange_up2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    down: {
+        frames: [
+            loadImage('SPRITES/orange/orange_down1.png'),
+            loadImage('SPRITES/orange/orange_down2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    }
+}
+
+//animaciones de pink
+const pinkAnimations = {
+    right: {
+        frames: [
+            loadImage('SPRITES/pink/pink_right1.png'),
+            loadImage('SPRITES/pink/pink_right2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    left: {
+        frames: [
+            loadImage('SPRITES/pink/pink_left1.png'),
+            loadImage('SPRITES/pink/pink_left2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    up: {
+        frames: [
+            loadImage('SPRITES/pink/pink_up1.png'),
+            loadImage('SPRITES/pink/pink_up2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    down: {
+        frames: [
+            loadImage('SPRITES/pink/pink_down1.png'),
+            loadImage('SPRITES/pink/pink_down2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    }
+}
+
+//animaciones de red
+const redAnimations = {
+    right: {
+        frames: [
+            loadImage('SPRITES/red/red_right1.png'),
+            loadImage('SPRITES/red/red_right2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    left: {
+        frames: [
+            loadImage('SPRITES/red/red_left1.png'),
+            loadImage('SPRITES/red/red_left2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    up: {
+        frames: [
+            loadImage('SPRITES/red/red_up1.png'),
+            loadImage('SPRITES/red/red_up2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    },
+    down: {
+        frames: [
+            loadImage('SPRITES/red/red_down1.png'),
+            loadImage('SPRITES/red/red_down2.png')
+        ],
+        speed: 0.15,
+        loop: true
+    }
+}
+
+//animacion de los ojos de los fantasmas
+const eyesAnimation = {
+    right: {
+        frames: loadImage('SPRITES/eyes/eyes_right.png')
+    },
+    left: {
+        frames:loadImage('SPRITES/eyes/eyes_left.png')
+    },
+    up: {
+        frames: loadImage('SPRITES/eyes/eyes_up.png')
+    },
+    down: {
+        frames: loadImage('SPRITES/eyes/eyes_down.png')
+    }
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Crear instancias de fantasmas ahora que las animaciones están definidas
+const ghosts = [
+    createGhost({ x: 11, y: 14, color: 'blue', animations: blueAnimations }),
+    createGhost({ x: 12, y: 14, color: 'pink', animations: pinkAnimations }),
+    createGhost({ x: 13, y: 14, color: 'red', animations: redAnimations }),
+    createGhost({ x: 14, y: 14, color: 'orange', animations: ornageAnimations })
+];
+
 // === MÁTRIZ DEL MAPA ===
 const maze = [
     [2, 6, 39, 6, 6, 6, 6, 6, 6, 6, 6, 6, 39, 6, 6, 6, 6, 6, 6, 6, 6, 6, 39, 6, 3],
@@ -232,12 +419,27 @@ function drawPacman() {
     if (!frame.complete) {
         ctx.fillStyle = "yellow";
         ctx.beginPath();
-        ctx.arc(pacman.px + TILE_SIZE/2, pacman.py + TILE_SIZE/2, TILE_SIZE/2, 0, Math.PI*2);
+        ctx.arc(pacman.px + TILE_SIZE / 2, pacman.py + TILE_SIZE / 2, TILE_SIZE / 2, 0, Math.PI * 2);
         ctx.fill();
         return;
     }
 
     ctx.drawImage(frame, pacman.px, pacman.py, TILE_SIZE, TILE_SIZE);
+}
+
+//dibujar los fantasmas
+function drawGhost(ghost) {
+    const anim = ghost.animations[ghost.animation];
+    const frame = anim.frames[ghost.frameIndex];
+
+    if (!frame || !frame.complete) {
+        // placeholder si aún no cargó
+        ctx.fillStyle = 'cyan';
+        ctx.fillRect(ghost.px, ghost.py, TILE_SIZE, TILE_SIZE);
+        return;
+    }
+
+    ctx.drawImage(frame, ghost.px, ghost.py, TILE_SIZE, TILE_SIZE);
 }
 
 //función que dibuja las tiles
@@ -259,7 +461,7 @@ function drawMaze() {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === FUNCIONES DE ACTUALIZACIÓN ===
-//actualizar animaciones
+//actualizar animaciones de pacman
 function updateAnimation(entity, deltaTime) {
     const anim = pacmanAnimations[entity.animation];
     entity.frameTimer += deltaTime;
@@ -295,9 +497,9 @@ function updatePacman(deltaTime) {
     let tentativePy = prevPy;
     switch (pacman.direction) {
         case 'right': tentativePx += move; break;
-        case 'left':  tentativePx -= move; break;
-        case 'up':    tentativePy -= move; break;
-        case 'down':  tentativePy += move; break;
+        case 'left': tentativePx -= move; break;
+        case 'up': tentativePy -= move; break;
+        case 'down': tentativePy += move; break;
     }
 
     // centros tentativos
@@ -337,9 +539,9 @@ function updatePacman(deltaTime) {
             tentativePy = pacman.py;
             switch (pacman.direction) {
                 case 'right': tentativePx += move; break;
-                case 'left':  tentativePx -= move; break;
-                case 'up':    tentativePy -= move; break;
-                case 'down':  tentativePy += move; break;
+                case 'left': tentativePx -= move; break;
+                case 'up': tentativePy -= move; break;
+                case 'down': tentativePy += move; break;
             }
         }
     }
@@ -348,10 +550,20 @@ function updatePacman(deltaTime) {
     let newPx = tentativePx;
     let newPy = tentativePy;
 
+    // WRAP HORIZONTAL: si la esquina del sprite sale del canvas, teletransportar al lado opuesto
+    // Calculamos en base al ancho del mundo (número de columnas * TILE_SIZE)
+    const cols = maze[0].length;
+    const worldWidth = cols * TILE_SIZE;
+    if (newPx < 0) {
+        newPx = worldWidth - TILE_SIZE;
+    } else if (newPx + TILE_SIZE > worldWidth) {
+        newPx = 0;
+    }
+
     // TILES QUE OCUPARÁ PAC-MAN
-    const leftTile   = Math.floor(newPx / TILE_SIZE);
-    const rightTile  = Math.floor((newPx + TILE_SIZE - 1) / TILE_SIZE);
-    const topTile    = Math.floor(newPy / TILE_SIZE);
+    const leftTile = Math.floor(newPx / TILE_SIZE);
+    const rightTile = Math.floor((newPx + TILE_SIZE - 1) / TILE_SIZE);
+    const topTile = Math.floor(newPy / TILE_SIZE);
     const bottomTile = Math.floor((newPy + TILE_SIZE - 1) / TILE_SIZE);
 
     // COMPROBAR COLISIONES
@@ -375,23 +587,83 @@ function updatePacman(deltaTime) {
     if (canMoveX) pacman.px = newPx;
     if (canMoveY) pacman.py = newPy;
 
-    // ACTUALIZAR TILE ACTUAL
-    const oldTileX = pacman.x;
-    const oldTileY = pacman.y;
-
+    // ACTUALIZAR TILE ACTUAL (variables para uso general)
     pacman.x = Math.floor(pacman.px / TILE_SIZE);
     pacman.y = Math.floor(pacman.py / TILE_SIZE);
 
-    // COMER PÍLDORA
-    if ((pacman.x !== oldTileX || pacman.y !== oldTileY) && (maze[pacman.y][pacman.x] === 8 || maze[pacman.y][pacman.x] === 9)) {
-        maze[pacman.y][pacman.x] = 1;
+    // COMER PÍLDORA: usar el centro del sprite y umbral de 1/4 del tile
+    const EAT_THRESHOLD = 0.25; // fracción del tile
+    const newCx = pacman.px + TILE_SIZE / 2;
+    const newCy = pacman.py + TILE_SIZE / 2;
+    const newTileX = Math.floor(newCx / TILE_SIZE);
+    const newTileY = Math.floor(newCy / TILE_SIZE);
+
+    // prevTileX/Y están calculados anteriormente como currTileX/currTileY (basados en prev center)
+    const prevTileX = currTileX;
+    const prevTileY = currTileY;
+
+    let ate = false;
+    if (newTileX !== prevTileX || newTileY !== prevTileY) {
+        // movimiento horizontal
+        if (newTileX === prevTileX + 1 && newTileY === prevTileY) {
+            // entró hacia la derecha
+            const penetration = (newCx - newTileX * TILE_SIZE) / TILE_SIZE;
+            if (penetration >= EAT_THRESHOLD) ate = true;
+        } else if (newTileX === prevTileX - 1 && newTileY === prevTileY) {
+            // entró hacia la izquierda (penetration desde la derecha)
+            const penetration = ((newTileX + 1) * TILE_SIZE - newCx) / TILE_SIZE;
+            if (penetration >= EAT_THRESHOLD) ate = true;
+        }
+        // movimiento vertical
+        if (newTileY === prevTileY + 1 && newTileX === prevTileX) {
+            // entró hacia abajo
+            const penetration = (newCy - newTileY * TILE_SIZE) / TILE_SIZE;
+            if (penetration >= EAT_THRESHOLD) ate = true;
+        } else if (newTileY === prevTileY - 1 && newTileX === prevTileX) {
+            // entró hacia arriba (penetration desde abajo)
+            const penetration = ((newTileY + 1) * TILE_SIZE - newCy) / TILE_SIZE;
+            if (penetration >= EAT_THRESHOLD) ate = true;
+        }
+    } else {
+        // si no cambió de tile pero se mueve dentro del mismo, también podríamos comer si llegamos al umbral desde el borde
+        // detectar dirección y comprobar penetración relativa al borde contrario
+        const fracX = (newCx - newTileX * TILE_SIZE) / TILE_SIZE;
+        const fracY = (newCy - newTileY * TILE_SIZE) / TILE_SIZE;
+        if (pacman.direction === 'right' && fracX >= EAT_THRESHOLD) ate = true;
+        if (pacman.direction === 'left' && (1 - fracX) >= EAT_THRESHOLD) ate = true;
+        if (pacman.direction === 'down' && fracY >= EAT_THRESHOLD) ate = true;
+        if (pacman.direction === 'up' && (1 - fracY) >= EAT_THRESHOLD) ate = true;
+    }
+
+    if (ate) {
+        if (typeof maze[newTileY] !== 'undefined' && typeof maze[newTileY][newTileX] !== 'undefined') {
+            if (maze[newTileY][newTileX] === 8 || maze[newTileY][newTileX] === 9) {
+                maze[newTileY][newTileX] = 1;
+            }
+        }
     }
 }
+
+//actualizar animaciones de los fantasmas
+function updateGhostAnimation(ghost, deltaTime) {
+    const anim = ghost.animations[ghost.animation];
+    ghost.frameTimer += deltaTime;
+
+    if (ghost.frameTimer >= anim.speed) {
+        ghost.frameTimer = 0;
+        ghost.frameIndex++;
+        if (ghost.frameIndex >= anim.frames.length) {
+            ghost.frameIndex = anim.loop ? 0 : anim.frames.length - 1;
+        }
+    }
+}
+
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === GESTIÓN DE TECLAS ===
 canvas.addEventListener('keydown', e => {
-    switch(e.key) {
+    switch (e.key) {
         case 'ArrowUp': pacman.nextDirection = 'up'; break;
         case 'ArrowDown': pacman.nextDirection = 'down'; break;
         case 'ArrowLeft': pacman.nextDirection = 'left'; break;
@@ -438,9 +710,16 @@ function gameLoop(time) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     drawMaze();
+
     updatePacman(deltaTime);
     updateAnimation(pacman, deltaTime);
     drawPacman();
+
+    // === FANTASMAS ===
+    for (const ghost of ghosts) {
+        updateGhostAnimation(ghost, deltaTime);
+        drawGhost(ghost);
+    }
 
     requestAnimationFrame(gameLoop);
 }
