@@ -52,7 +52,7 @@ const pacman = {
     nextDirection: 'right',
     frameIndex: 0,
     frameTimer: 0,
-    speed: 80 // píxeles por segundo
+    speed: 140 // píxeles por segundo
 };
 
 //función para crear fantasmas
@@ -392,6 +392,7 @@ const ghosts = [
     createGhost({ x: 13, y: 14, color: 'red', animations: redAnimations, spawnDelay: 60})
 ];
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === MÁTRIZ DEL MAPA ===
 const maze = [
     [2, 6, 39, 6, 6, 6, 6, 6, 6, 6, 6, 6, 39, 6, 6, 6, 6, 6, 6, 6, 6, 6, 39, 6, 3],
@@ -823,6 +824,94 @@ function updateTimer(deltaTime) {
         red.active = true;
     }
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// === ALGORITMOS PARA A* ===
+//heurística tipo manhattan
+function heuristic(a, b) {
+    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+//nodo A*
+class Node {
+    constructor(x, y, g = 0, h = 0, parent = null) {
+        this.x = x;
+        this.y = y;
+        this.g = g;
+        this.h = h;
+        this.f = g + h;
+        this.parent = parent;
+    }
+}
+
+//recuperar los vecinos
+function getNeighbors(x, y) {
+    return [
+        { x: x + 1, y },
+        { x: x - 1, y },
+        { x, y: y + 1 },
+        { x, y: y - 1 }
+    ];
+}
+
+//algoritmo A*
+function aStar(start, goal) {
+    const openSet = [];
+    const closedSet = new Set();
+
+    const startNode = new Node(
+        start.x,
+        start.y,
+        0,
+        heuristic(start, goal)
+    );
+
+    openSet.push(startNode);
+
+    while (openSet.length > 0) {
+        // elegir el nodo con menor f
+        openSet.sort((a, b) => a.f - b.f);
+        const current = openSet.shift();
+
+        // ¿llegamos?
+        if (current.x === goal.x && current.y === goal.y) {
+            const path = [];
+            let temp = current;
+            while (temp) {
+                path.push({ x: temp.x, y: temp.y });
+                temp = temp.parent;
+            }
+            return path.reverse();
+        }
+
+        closedSet.add(`${current.x},${current.y}`);
+
+        for (const n of getNeighbors(current.x, current.y)) {
+            if (!canMove(n.x, n.y)) continue;
+
+            const key = `${n.x},${n.y}`;
+            if (closedSet.has(key)) continue;
+
+            const g = current.g + 1;
+            const h = heuristic(n, goal);
+
+            const existing = openSet.find(
+                node => node.x === n.x && node.y === n.y
+            );
+
+            if (!existing) {
+                openSet.push(new Node(n.x, n.y, g, h, current));
+            } else if (g < existing.g) {
+                existing.g = g;
+                existing.f = g + existing.h;
+                existing.parent = current;
+            }
+        }
+    }
+
+    return null;
+}
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === GESTIÓN DE TECLAS ===
