@@ -1085,6 +1085,12 @@ checkAllImagesLoaded();
 let lastTime = 0;
 
 function gameLoop(time) {
+
+    //inicializamos en el primer frame para evitar errores
+    if (lastTime === 0) {
+        lastTime = time;
+    }
+
     const deltaTime = (time - lastTime) / 1000;
     lastTime = time;
 
