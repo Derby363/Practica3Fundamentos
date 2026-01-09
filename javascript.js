@@ -769,7 +769,6 @@ function updateGhostAI(ghost, deltaTime) {
     const centeredX = Math.abs(prevCx - tileCenterX) < 4;
     const centeredY = Math.abs(prevCy - tileCenterY) < 4;
     const isCentered = centeredX && centeredY;
-F
 
     //asignar esquina objetivo según el color
     if (ghost.color === 'red' && !ghost.active) {
