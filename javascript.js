@@ -751,6 +751,26 @@ function updateGhostAI(ghost, deltaTime) {
     const cols = maze[0].length;
     const rows = maze.length;
 
+    //declaración de variables para evitar la TDZ
+    
+
+    //posiciones y centros previos
+    const prevPx = ghost.px;
+    const prevPy = ghost.py;
+    const prevCx = prevPx + TILE_SIZE / 2;
+    const prevCy = prevPy + TILE_SIZE / 2;
+
+    const currTileX = Math.floor(prevCx / TILE_SIZE);
+    const currTileY = Math.floor(prevCy / TILE_SIZE);
+    const tileCenterX = currTileX * TILE_SIZE + TILE_SIZE / 2;
+    const tileCenterY = currTileY * TILE_SIZE + TILE_SIZE / 2;
+
+    //determinar si está centrado (puede girar)
+    const centeredX = Math.abs(prevCx - tileCenterX) < 4;
+    const centeredY = Math.abs(prevCy - tileCenterY) < 4;
+    const isCentered = centeredX && centeredY;
+F
+
     //asignar esquina objetivo según el color
     if (ghost.color === 'red' && !ghost.active) {
         return; //red no se mueve si no está activo
@@ -819,23 +839,6 @@ function updateGhostAI(ghost, deltaTime) {
         ghost.direction = dir;
         ghost.animation = dir;
     }
-
-
-    //posiciones y centros previos
-    const prevPx = ghost.px;
-    const prevPy = ghost.py;
-    const prevCx = prevPx + TILE_SIZE / 2;
-    const prevCy = prevPy + TILE_SIZE / 2;
-
-    const currTileX = Math.floor(prevCx / TILE_SIZE);
-    const currTileY = Math.floor(prevCy / TILE_SIZE);
-    const tileCenterX = currTileX * TILE_SIZE + TILE_SIZE / 2;
-    const tileCenterY = currTileY * TILE_SIZE + TILE_SIZE / 2;
-
-    //determinar si está centrado (puede girar)
-    const centeredX = Math.abs(prevCx - tileCenterX) < 4;
-    const centeredY = Math.abs(prevCy - tileCenterY) < 4;
-    const isCentered = centeredX && centeredY;
 
     //elegir dirección cuando esté centrado en el tile
     if (isCentered) {
