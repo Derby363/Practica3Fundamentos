@@ -52,7 +52,7 @@ const pacman = {
     nextDirection: 'right',
     frameIndex: 0,
     frameTimer: 0,
-    speed: 140 // píxeles por segundo
+    speed: 100 // píxeles por segundo
 };
 
 //función para crear fantasmas
@@ -72,10 +72,13 @@ function createGhost({ x, y, color, animations, spawnDelay, speed }) {
         frameTimer: 0,
         speed: speed, // píxeles por segundo
 
+        //flag para saber cuando van a salir de la casa
+        exitingHouse: spawnDelay === 0,
+
         //timer para spawnear
         spawnDelay: spawnDelay, //en **MEDIOS** segundos
         spawnTimer: 0,
-        active: spawnDelay === 0,
+        active: false,
 
         //gestión de caminos
         path: [],
@@ -392,11 +395,11 @@ const eyesAnimation = {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === INSTANCIAS DE LOS FANTASMAS ===
 const ghosts = [
-    createGhost({ x: 11, y: 14, color: 'blue', animations: blueAnimations, spawnDelay: 0, speed: 120 }),
-    createGhost({ x: 12, y: 14, color: 'pink', animations: pinkAnimations, spawnDelay: 0, speed: 120 }),
-    createGhost({ x: 14, y: 14, color: 'orange', animations: ornageAnimations, spawnDelay: 0, speed: 120 }),
+    createGhost({ x: 13, y: 14, color: 'blue', animations: blueAnimations, spawnDelay: 0, speed: 90 }),
+    createGhost({ x: 13, y: 14, color: 'pink', animations: pinkAnimations, spawnDelay: 0, speed: 90 }),
+    createGhost({ x: 13, y: 14, color: 'orange', animations: ornageAnimations, spawnDelay: 0, speed: 90 }),
 
-    createGhost({ x: 13, y: 14, color: 'red', animations: redAnimations, spawnDelay: 60, speed: 200 })
+    createGhost({ x: 13, y: 14, color: 'red', animations: redAnimations, spawnDelay: 5, speed: 200 })
 ];
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -681,11 +684,12 @@ function getPinkTarget() {
     let tx = pacman.x;
     let ty = pacman.y;
 
+    // Pink se adelanta 2 casillas en la dirección de Pacman
     switch (pacman.direction) {
-        case 'up': ty -= 4; break;
-        case 'down': ty += 4; break;
-        case 'left': tx -= 4; break;
-        case 'right': tx += 4; break;
+        case 'up': ty -= 2; break;
+        case 'down': ty += 2; break;
+        case 'left': tx -= 2; break;
+        case 'right': tx += 2; break;
     }
 
     return { x: tx, y: ty };
@@ -745,185 +749,242 @@ function updateGhostAnimation(ghost, deltaTime) {
 
 // IA basada en tiles: mover hacia una esquina sin atravesar paredes
 function updateGhostAI(ghost, deltaTime) {
-    //si no se ha cargado el mapa vuelve
+
     if (!maze || !maze[0]) return;
-    //recoge las filas y columnas
-    const cols = maze[0].length;
-    const rows = maze.length;
 
-    //declaración de variables para evitar la TDZ
-    
+    // CENTRO ACTUAL DEL FANTASMA Y TILE
+    const cx = ghost.px + TILE_SIZE / 2;
+    const cy = ghost.py + TILE_SIZE / 2;
+    const tileX = Math.floor(cx / TILE_SIZE);
+    const tileY = Math.floor(cy / TILE_SIZE);
 
-    //posiciones y centros previos
-    const prevPx = ghost.px;
-    const prevPy = ghost.py;
-    const prevCx = prevPx + TILE_SIZE / 2;
-    const prevCy = prevPy + TILE_SIZE / 2;
-
-    const currTileX = Math.floor(prevCx / TILE_SIZE);
-    const currTileY = Math.floor(prevCy / TILE_SIZE);
-    const tileCenterX = currTileX * TILE_SIZE + TILE_SIZE / 2;
-    const tileCenterY = currTileY * TILE_SIZE + TILE_SIZE / 2;
-
-    //determinar si está centrado (puede girar)
-    const centeredX = Math.abs(prevCx - tileCenterX) < 4;
-    const centeredY = Math.abs(prevCy - tileCenterY) < 4;
-    const isCentered = centeredX && centeredY;
-
-    //asignar esquina objetivo según el color
-    if (ghost.color === 'red' && !ghost.active) {
-        return; //red no se mueve si no está activo
+    // --- DETECCIÓN Y DESBLOQUEO DE ATASCO ---
+    if (!ghost._stuckCheck) ghost._stuckCheck = { lastTileX: null, lastTileY: null, stuckTime: 0 };
+    if (ghost._stuckCheck.lastTileX === tileX && ghost._stuckCheck.lastTileY === tileY) {
+        ghost._stuckCheck.stuckTime += deltaTime;
+    } else {
+        ghost._stuckCheck.stuckTime = 0;
+        ghost._stuckCheck.lastTileX = tileX;
+        ghost._stuckCheck.lastTileY = tileY;
     }
-
-    //si esta activo hace A*, pero mucho más rápido que pacman
-    if (ghost.color === 'red' && isCentered) {
-        ghost.pathTimer += deltaTime;
-
-        if (ghost.pathTimer >= ghost.pathCooldown) {
-            ghost.pathTimer = 0;
-
-            ghost.path = aStar(
-                { x: currTileX, y: currTileY },
-                { x: pacman.x, y: pacman.y }
-            );
-            ghost.pathIndex = 0;
+    // Si lleva más de 1 segundo atascado en la misma celda, forzar camino aleatorio
+    if (ghost._stuckCheck.stuckTime > 1.0) {
+        const dirs = ['up', 'down', 'left', 'right'];
+        // Mezclar direcciones
+        for (let i = dirs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
         }
-
-        if (ghost.path && ghost.path.length > 1) {
-            const next = ghost.path[1];
-            setDirectionFromNextTile(ghost, currTileX, currTileY, next);
-        }
-    }
-
-    //pink hace A* dos casillas adelantado
-    if (ghost.color === 'pink' && isCentered) {
-        ghost.pathTimer += deltaTime;
-
-        if (ghost.pathTimer >= ghost.pathCooldown) {
-            ghost.pathTimer = 0;
-
-            ghost.path = aStar(
-                { x: currTileX, y: currTileY },
-                getPinkTarget()
-            );
-            ghost.pathIndex = 0;
-        }
-
-        if (ghost.path && ghost.path.length > 1) {
-            setDirectionFromNextTile(ghost, currTileX, currTileY, ghost.path[1]);
-        }
-    }
-
-    //orange hace A* normal
-    if (ghost.color === 'orange' && isCentered) {
-        ghost.pathTimer += deltaTime;
-
-        if (ghost.pathTimer >= ghost.pathCooldown) {
-            ghost.pathTimer = 0;
-
-            ghost.path = aStar(
-                { x: currTileX, y: currTileY },
-                { x: pacman.x, y: pacman.y }
-            );
-            ghost.pathIndex = 0;
-        }
-
-        if (ghost.path && ghost.path.length > 1) {
-            setDirectionFromNextTile(ghost, currTileX, currTileY, ghost.path[1]);
-        }
-    }
-
-    if (ghost.color === 'blue' && isCentered) {
-        const dir = wallFollowerDirection(ghost, currTileX, currTileY);
-        ghost.direction = dir;
-        ghost.animation = dir;
-    }
-
-    //elegir dirección cuando esté centrado en el tile
-    if (isCentered) {
-        //opciones de movimiento
-        const dirs = [
-            { name: 'left', dx: -1, dy: 0 },
-            { name: 'right', dx: 1, dy: 0 },
-            { name: 'up', dx: 0, dy: -1 },
-            { name: 'down', dx: 0, dy: 1 }
-        ];
-
-        //evitar retroceder salvo que sea la única opción
-        const opposite = { left: 'right', right: 'left', up: 'down', down: 'up' };
-        let best = null;
-        let bestDist = Infinity;
-        for (const d of dirs) {
-            const nx = currTileX + d.dx;
-            const ny = currTileY + d.dy;
-            if (!canMove(nx, ny, ghost)) continue;
-            // evitar ir en la dirección opuesta inmediatamente
-            if (ghost.direction && d.name === opposite[ghost.direction]) continue;
-            const dist = Math.hypot(targetTile.x - nx, targetTile.y - ny);
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = d.name;
+        for (const dir of dirs) {
+            let dx = 0, dy = 0;
+            if (dir === 'up') dy = -1;
+            if (dir === 'down') dy = 1;
+            if (dir === 'left') dx = -1;
+            if (dir === 'right') dx = 1;
+            if (canMove(tileX + dx, tileY + dy, ghost)) {
+                ghost.direction = dir;
+                ghost.animation = dir;
+                // resetear camino y objetivo
+                ghost.path = null;
+                ghost.pathIndex = 0;
+                ghost.lastTarget = null;
+                ghost._stuckCheck.stuckTime = 0;
+                break;
             }
         }
+        return;
+    }
 
-        //si no encontró opción evitando retroceso, permitir retroceso
-        if (!best) {
-            for (const d of dirs) {
-                const nx = currTileX + d.dx;
-                const ny = currTileY + d.dy;
-                if (!canMove(nx, ny, ghost)) continue;
-                const dist = Math.hypot(targetTile.x - nx, targetTile.y - ny);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = d.name;
+    const centerX = tileX * TILE_SIZE + TILE_SIZE / 2;
+    const centerY = tileY * TILE_SIZE + TILE_SIZE / 2;
+
+    const isCentered =
+        Math.abs(cx - centerX) < 4 &&
+        Math.abs(cy - centerY) < 4;
+
+    // =============================
+    // SALIDA DE LA CASA
+    // =============================
+    const DOOR_EXIT_Y = 12; // fila justo fuera de la puerta
+
+    if (ghost.exitingHouse) {
+        // centrar horizontalmente en la puerta
+        ghost.px = 13 * TILE_SIZE; // centro de la puerta
+        ghost.direction = 'up';
+        ghost.animation = 'up';
+
+        ghost.py -= ghost.speed * deltaTime;
+
+        // Aseguramos que el fantasma cruce completamente la puerta
+        if (ghost.py + TILE_SIZE / 2 <= (DOOR_EXIT_Y + 0.5) * TILE_SIZE) {
+            ghost.exitingHouse = false;
+            ghost.active = true;
+            ghost.py = DOOR_EXIT_Y * TILE_SIZE; // snap
+        } else if (ghost.py < (DOOR_EXIT_Y - 1) * TILE_SIZE) {
+            // Seguridad extra: si por alguna razón se pasa, forzamos la salida
+            ghost.exitingHouse = false;
+            ghost.active = true;
+            ghost.py = DOOR_EXIT_Y * TILE_SIZE;
+        }
+
+        return;
+    }
+
+    // =============================
+    // IA NORMAL (FUERA DE LA CASA)
+    // =============================
+    if (isCentered) {
+        // Aleatoriedad para evitar caminos idénticos
+        function randomOffset(max) {
+            return Math.floor(Math.random() * (2 * max + 1)) - max;
+        }
+        function clamp(val, min, max) {
+            return Math.max(min, Math.min(max, val));
+        }
+
+        // RED, BLUE, ORANGE: siguen a Pacman con A* pero con pequeño offset aleatorio
+        if (ghost.color === 'red' || ghost.color === 'blue' || ghost.color === 'orange') {
+            // Offset aleatorio de -1, 0 o 1 en x/y
+            let offsetX = 0, offsetY = 0;
+            if (!ghost.lastTarget || ghost.lastTarget.x !== pacman.x || ghost.lastTarget.y !== pacman.y) {
+                offsetX = randomOffset(1);
+                offsetY = randomOffset(1);
+                ghost._offsetX = offsetX;
+                ghost._offsetY = offsetY;
+            } else {
+                offsetX = ghost._offsetX || 0;
+                offsetY = ghost._offsetY || 0;
+            }
+            // Limitar objetivo dentro del mapa
+            const maxX = maze[0].length - 1;
+            const maxY = maze.length - 1;
+            const target = {
+                x: clamp(pacman.x + offsetX, 0, maxX),
+                y: clamp(pacman.y + offsetY, 0, maxY)
+            };
+            if (!ghost.path || ghost.path.length <= 1 ||
+                !ghost.lastTarget || ghost.lastTarget.x !== target.x || ghost.lastTarget.y !== target.y) {
+                ghost.path = aStar({ x: tileX, y: tileY }, target);
+                ghost.pathIndex = 0;
+                ghost.lastTarget = { ...target };
+            }
+            // Avanzar por el camino si existe
+            if (ghost.path && ghost.path.length > 1 && ghost.pathIndex < ghost.path.length - 1) {
+                ghost.pathIndex++;
+                setDirectionFromNextTile(ghost, tileX, tileY, ghost.path[ghost.pathIndex]);
+            } else if (!ghost.path || ghost.path.length <= 1) {
+                // Si no hay camino, moverse aleatoriamente
+                const dirs = ['up', 'down', 'left', 'right'];
+                for (let i = dirs.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+                }
+                for (const dir of dirs) {
+                    let dx = 0, dy = 0;
+                    if (dir === 'up') dy = -1;
+                    if (dir === 'down') dy = 1;
+                    if (dir === 'left') dx = -1;
+                    if (dir === 'right') dx = 1;
+                    if (canMove(tileX + dx, tileY + dy, ghost)) {
+                        ghost.direction = dir;
+                        ghost.animation = dir;
+                        break;
+                    }
                 }
             }
         }
 
-        if (best) {
-            ghost.direction = best;
-            ghost.animation = best;
-            //snap perpendicular coordinate
-            if (best === 'left' || best === 'right') ghost.py = currTileY * TILE_SIZE;
-            if (best === 'up' || best === 'down') ghost.px = currTileX * TILE_SIZE;
+        // PINK: A* adelantado 2 casillas (también con pequeño offset aleatorio)
+        if (ghost.color === 'pink') {
+            const pinkBase = getPinkTarget();
+            let offsetX = 0, offsetY = 0;
+            if (!ghost.lastTarget || ghost.lastTarget.x !== pinkBase.x || ghost.lastTarget.y !== pinkBase.y) {
+                offsetX = randomOffset(1);
+                offsetY = randomOffset(1);
+                ghost._offsetX = offsetX;
+                ghost._offsetY = offsetY;
+            } else {
+                offsetX = ghost._offsetX || 0;
+                offsetY = ghost._offsetY || 0;
+            }
+            const maxX = maze[0].length - 1;
+            const maxY = maze.length - 1;
+            const pinkTarget = {
+                x: clamp(pinkBase.x + offsetX, 0, maxX),
+                y: clamp(pinkBase.y + offsetY, 0, maxY)
+            };
+            if (!ghost.path || ghost.path.length <= 1 ||
+                !ghost.lastTarget || ghost.lastTarget.x !== pinkTarget.x || ghost.lastTarget.y !== pinkTarget.y) {
+                ghost.path = aStar({ x: tileX, y: tileY }, pinkTarget);
+                ghost.pathIndex = 0;
+                ghost.lastTarget = { ...pinkTarget };
+            }
+            if (ghost.path && ghost.path.length > 1 && ghost.pathIndex < ghost.path.length - 1) {
+                ghost.pathIndex++;
+                setDirectionFromNextTile(ghost, tileX, tileY, ghost.path[ghost.pathIndex]);
+            } else if (!ghost.path || ghost.path.length <= 1) {
+                // Si no hay camino, moverse aleatoriamente
+                const dirs = ['up', 'down', 'left', 'right'];
+                for (let i = dirs.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+                }
+                for (const dir of dirs) {
+                    let dx = 0, dy = 0;
+                    if (dir === 'up') dy = -1;
+                    if (dir === 'down') dy = 1;
+                    if (dir === 'left') dx = -1;
+                    if (dir === 'right') dx = 1;
+                    if (canMove(tileX + dx, tileY + dy, ghost)) {
+                        ghost.direction = dir;
+                        ghost.animation = dir;
+                        break;
+                    }
+                }
+            }
         }
     }
 
-    // mover en la dirección actual si es posible
-    const move = (ghost.speed || 40) * deltaTime;
-    let tentativePx = ghost.px;
-    let tentativePy = ghost.py;
+    // =============================
+    // MOVIMIENTO FINAL
+    // =============================
+    const move = ghost.speed * deltaTime;
+    let nextPx = ghost.px;
+    let nextPy = ghost.py;
+
     switch (ghost.direction) {
-        case 'right': tentativePx += move; break;
-        case 'left': tentativePx -= move; break;
-        case 'up': tentativePy -= move; break;
-        case 'down': tentativePy += move; break;
+        case 'right': nextPx += move; break;
+        case 'left': nextPx -= move; break;
+        case 'up': nextPy -= move; break;
+        case 'down': nextPy += move; break;
     }
 
-    // comprobar colisiones similares a pacman
-    const leftTile = Math.floor(tentativePx / TILE_SIZE);
-    const rightTile = Math.floor((tentativePx + TILE_SIZE - 1) / TILE_SIZE);
-    const topTile = Math.floor(tentativePy / TILE_SIZE);
-    const bottomTile = Math.floor((tentativePy + TILE_SIZE - 1) / TILE_SIZE);
+    const left = Math.floor(nextPx / TILE_SIZE);
+    const right = Math.floor((nextPx + TILE_SIZE - 1) / TILE_SIZE);
+    const top = Math.floor(nextPy / TILE_SIZE);
+    const bottom = Math.floor((nextPy + TILE_SIZE - 1) / TILE_SIZE);
 
-    let canMoveX = true;
-    let canMoveY = true;
+    let canX = true;
+    let canY = true;
+
     if (ghost.direction === 'right') {
-        if (!canMove(rightTile, topTile, ghost) || !canMove(rightTile, bottomTile, ghost)) canMoveX = false;
+        if (!canMove(right, top, ghost) || !canMove(right, bottom, ghost)) canX = false;
     }
     if (ghost.direction === 'left') {
-        if (!canMove(leftTile, topTile, ghost) || !canMove(leftTile, bottomTile, ghost)) canMoveX = false;
+        if (!canMove(left, top, ghost) || !canMove(left, bottom, ghost)) canX = false;
     }
     if (ghost.direction === 'up') {
-        if (!canMove(leftTile, topTile, ghost) || !canMove(rightTile, topTile, ghost)) canMoveY = false;
+        if (!canMove(left, top, ghost) || !canMove(right, top, ghost)) canY = false;
     }
     if (ghost.direction === 'down') {
-        if (!canMove(leftTile, bottomTile, ghost) || !canMove(rightTile, bottomTile, ghost)) canMoveY = false;
+        if (!canMove(left, bottom, ghost) || !canMove(right, bottom, ghost)) canY = false;
     }
 
-    if (canMoveX) ghost.px = tentativePx;
-    if (canMoveY) ghost.py = tentativePy;
+    if (canX) ghost.px = nextPx;
+    if (canY) ghost.py = nextPy;
 }
+
+
 
 //actualizr la activación de los fantasmas
 function updateGhostSpawn(ghost, deltaTime) {
@@ -933,20 +994,20 @@ function updateGhostSpawn(ghost, deltaTime) {
 
     if (ghost.spawnTimer >= ghost.spawnDelay) {
         ghost.active = true;
+        ghost.exitingHouse = true;
+
+        // fuerza salida hacia arriba
+        ghost.direction = 'up';
+        ghost.animation = 'up';
+
         ghost.spawnTimer = 0;
     }
 }
 
-//función de reloj, maneja todos los eventos por tiempo
+
+//función de reloj
 function updateTimer(deltaTime) {
     timer += deltaTime;
-
-    //controlamos que el fantasma rojo salga solo tras 30s
-    const red = ghosts.find(g => g.color === 'red');
-    red.spawnTimer += deltaTime;
-    if (red.spawnTimer >= red.spawnDelay) {
-        red.active = true;
-    }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -956,7 +1017,7 @@ function heuristic(a, b) {
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
-//nodo A*
+//clase nodo A*
 class Node {
     constructor(x, y, g = 0, h = 0, parent = null) {
         this.x = x;
@@ -1057,17 +1118,23 @@ function isWall(tile) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === MÉTODOS DE MOVIMIENTO ===
 //comprueba si puede avanzar
-function canMove(tileX, tileY) {
-    // Verifica que el tile exista y no sea muro (comprobación correcta de undefined)
-    // soporta un parámetro opcional 'entity' para excepciones (p.ej. fantasmas que pueden atravesar tile 64)
-    let entity = undefined;
-    if (arguments.length > 2) entity = arguments[2];
-    if (typeof maze[tileY] === 'undefined' || typeof maze[tileY][tileX] === 'undefined') return false;
-    const tileVal = maze[tileY][tileX];
-    // si es el tile 64 y la entidad es un fantasma, permitir paso
-    if (tileVal === 64 && entity && entity.type === 'ghost') return true;
-    return !isWall(tileVal);
+const TILE_DOOR_IDS = [63, 64, 65]; // todos los tiles que componen la puerta
+function canMove(tileX, tileY, entity = null) {
+    if (
+        typeof maze[tileY] === 'undefined' ||
+        typeof maze[tileY][tileX] === 'undefined'
+    ) return false;
+
+    const tile = maze[tileY][tileX];
+
+    // permitir que los fantasmas salgan por la puerta
+    if (TILE_DOOR_IDS.includes(tile)) {
+        return entity?.type === 'ghost' && entity.exitingHouse;
+    }
+
+    return tile === 1 || tile === 8 || tile === 9;
 }
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === COMPROBAR QUE TODAS LAS IMÁGENES HAN SIDO CARGADAS PARA INICIAR EL JUEGO ===
