@@ -56,7 +56,7 @@ const pacman = {
 };
 
 //función para crear fantasmas
-function createGhost({ x, y, color, animations, spawnDelay }) {
+function createGhost({ x, y, color, animations, spawnDelay, speed }) {
     return {
         name: color,
         x,
@@ -70,11 +70,18 @@ function createGhost({ x, y, color, animations, spawnDelay }) {
         color,
         frameIndex: 0,
         frameTimer: 0,
-        speed: 40, // píxeles por segundo por defecto
+        speed: speed, // píxeles por segundo
 
+        //timer para spawnear
         spawnDelay: spawnDelay, //en **MEDIOS** segundos
         spawnTimer: 0,
-        active: spawnDelay === 0
+        active: spawnDelay === 0,
+
+        //gestión de caminos
+        path: [],
+        pathIndex: 0,
+        pathTimer: 0,
+        pathCooldown: 0.4 // segundos
     };
 }
 
@@ -372,7 +379,7 @@ const eyesAnimation = {
         frames: loadImage('SPRITES/eyes/eyes_right.png')
     },
     left: {
-        frames:loadImage('SPRITES/eyes/eyes_left.png')
+        frames: loadImage('SPRITES/eyes/eyes_left.png')
     },
     up: {
         frames: loadImage('SPRITES/eyes/eyes_up.png')
@@ -385,11 +392,11 @@ const eyesAnimation = {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === INSTANCIAS DE LOS FANTASMAS ===
 const ghosts = [
-    createGhost({ x: 11, y: 14, color: 'blue', animations: blueAnimations, spawnDelay: 0 }),
-    createGhost({ x: 12, y: 14, color: 'pink', animations: pinkAnimations, spawnDelay: 0 }),
-    createGhost({ x: 14, y: 14, color: 'orange', animations: ornageAnimations, spawnDelay: 0 }),
+    createGhost({ x: 11, y: 14, color: 'blue', animations: blueAnimations, spawnDelay: 0, speed: 120 }),
+    createGhost({ x: 12, y: 14, color: 'pink', animations: pinkAnimations, spawnDelay: 0, speed: 120 }),
+    createGhost({ x: 14, y: 14, color: 'orange', animations: ornageAnimations, spawnDelay: 0, speed: 120 }),
 
-    createGhost({ x: 13, y: 14, color: 'red', animations: redAnimations, spawnDelay: 60})
+    createGhost({ x: 13, y: 14, color: 'red', animations: redAnimations, spawnDelay: 60, speed: 200 })
 ];
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -669,6 +676,58 @@ function updatePacman(deltaTime) {
     }
 }
 
+//pink hace A* pero dos casillas adelantado a pacman
+function getPinkTarget() {
+    let tx = pacman.x;
+    let ty = pacman.y;
+
+    switch (pacman.direction) {
+        case 'up': ty -= 4; break;
+        case 'down': ty += 4; break;
+        case 'left': tx -= 4; break;
+        case 'right': tx += 4; break;
+    }
+
+    return { x: tx, y: ty };
+}
+
+//blue sigue la pared derecha
+function wallFollowerDirection(ghost, tileX, tileY) {
+    const order = {
+        up: ['right', 'up', 'left', 'down'],
+        right: ['down', 'right', 'up', 'left'],
+        down: ['left', 'down', 'right', 'up'],
+        left: ['up', 'left', 'down', 'right']
+    };
+
+    const dirs = {
+        up: { dx: 0, dy: -1 },
+        down: { dx: 0, dy: 1 },
+        left: { dx: -1, dy: 0 },
+        right: { dx: 1, dy: 0 }
+    };
+
+    for (const dir of order[ghost.direction]) {
+        const d = dirs[dir];
+        if (canMove(tileX + d.dx, tileY + d.dy, ghost)) {
+            return dir;
+        }
+    }
+
+    return ghost.direction;
+}
+
+//función para no repetir código
+function setDirectionFromNextTile(ghost, x, y, next) {
+    if (next.x > x) ghost.direction = 'right';
+    else if (next.x < x) ghost.direction = 'left';
+    else if (next.y > y) ghost.direction = 'down';
+    else if (next.y < y) ghost.direction = 'up';
+
+    ghost.animation = ghost.direction;
+}
+
+
 //actualizar animaciones de los fantasmas
 function updateGhostAnimation(ghost, deltaTime) {
     //animación del fantasma
@@ -692,12 +751,75 @@ function updateGhostAI(ghost, deltaTime) {
     const cols = maze[0].length;
     const rows = maze.length;
 
-    //asignar esquina objetivo según color/name
-    let targetTile = { x: 0, y: 0 };
-    if (ghost.color === 'blue' || ghost.name === 'inky') targetTile = { x: 0, y: rows - 1 }; // bottom-left
-    else if (ghost.color === 'pink' || ghost.name === 'pinky') targetTile = { x: 0, y: 0 }; // top-left
-    else if (ghost.color === 'red' || ghost.name === 'blinky') targetTile = { x: cols - 1, y: 0 }; // top-right
-    else if (ghost.color === 'orange' || ghost.name === 'clyde') targetTile = { x: cols - 1, y: rows - 1 }; // bottom-right
+    //asignar esquina objetivo según el color
+    if (ghost.color === 'red' && !ghost.active) {
+        return; //red no se mueve si no está activo
+    }
+
+    //si esta activo hace A*, pero mucho más rápido que pacman
+    if (ghost.color === 'red' && isCentered) {
+        ghost.pathTimer += deltaTime;
+
+        if (ghost.pathTimer >= ghost.pathCooldown) {
+            ghost.pathTimer = 0;
+
+            ghost.path = aStar(
+                { x: currTileX, y: currTileY },
+                { x: pacman.x, y: pacman.y }
+            );
+            ghost.pathIndex = 0;
+        }
+
+        if (ghost.path && ghost.path.length > 1) {
+            const next = ghost.path[1];
+            setDirectionFromNextTile(ghost, currTileX, currTileY, next);
+        }
+    }
+
+    //pink hace A* dos casillas adelantado
+    if (ghost.color === 'pink' && isCentered) {
+        ghost.pathTimer += deltaTime;
+
+        if (ghost.pathTimer >= ghost.pathCooldown) {
+            ghost.pathTimer = 0;
+
+            ghost.path = aStar(
+                { x: currTileX, y: currTileY },
+                getPinkTarget()
+            );
+            ghost.pathIndex = 0;
+        }
+
+        if (ghost.path && ghost.path.length > 1) {
+            setDirectionFromNextTile(ghost, currTileX, currTileY, ghost.path[1]);
+        }
+    }
+
+    //orange hace A* normal
+    if (ghost.color === 'orange' && isCentered) {
+        ghost.pathTimer += deltaTime;
+
+        if (ghost.pathTimer >= ghost.pathCooldown) {
+            ghost.pathTimer = 0;
+
+            ghost.path = aStar(
+                { x: currTileX, y: currTileY },
+                { x: pacman.x, y: pacman.y }
+            );
+            ghost.pathIndex = 0;
+        }
+
+        if (ghost.path && ghost.path.length > 1) {
+            setDirectionFromNextTile(ghost, currTileX, currTileY, ghost.path[1]);
+        }
+    }
+
+    if (ghost.color === 'blue' && isCentered) {
+        const dir = wallFollowerDirection(ghost, currTileX, currTileY);
+        ghost.direction = dir;
+        ghost.animation = dir;
+    }
+
 
     //posiciones y centros previos
     const prevPx = ghost.px;
