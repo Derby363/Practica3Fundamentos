@@ -6,6 +6,8 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const TILE_SIZE = 32; //cada tile es de 32x32
+const DECISION_RADIUS = 8; // px radius around tile center to start decisions earlier
+const GHOST_INSET = 5; // pixels inset for ghost bounding box (smaller footprint). Increased by 1 to reduce sprite size by 2px total (1px per side)
 
 //timer
 let timer = 0;
@@ -399,7 +401,7 @@ const ghosts = [
     createGhost({ x: 13, y: 14, color: 'pink', animations: pinkAnimations, spawnDelay: 0, speed: 90 }),
     createGhost({ x: 13, y: 14, color: 'orange', animations: ornageAnimations, spawnDelay: 0, speed: 90 }),
 
-    createGhost({ x: 13, y: 14, color: 'red', animations: redAnimations, spawnDelay: 5, speed: 200 })
+    createGhost({ x: 13, y: 14, color: 'red', animations: redAnimations, spawnDelay: 10, speed: 200 })
 ];
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -731,6 +733,17 @@ function setDirectionFromNextTile(ghost, x, y, next) {
     ghost.animation = ghost.direction;
 }
 
+// helper: returns the opposite direction
+function oppositeDirection(dir) {
+    switch (dir) {
+        case 'up': return 'down';
+        case 'down': return 'up';
+        case 'left': return 'right';
+        case 'right': return 'left';
+    }
+    return null;
+} 
+
 
 //actualizar animaciones de los fantasmas
 function updateGhostAnimation(ghost, deltaTime) {
@@ -802,6 +815,14 @@ function updateGhostAI(ghost, deltaTime) {
         Math.abs(cx - centerX) < 4 &&
         Math.abs(cy - centerY) < 4;
 
+    // inicializar flag para detectar la entrada al centro (evita incrementar pathIndex varias veces)
+    if (typeof ghost._centeredPrev === 'undefined') ghost._centeredPrev = false;
+    const enteringCenter = isCentered && !ghost._centeredPrev; // true solo el primer frame al entrar al centro
+    // inicializar flag para la zona de decisión temprana
+    if (typeof ghost._inDecisionPrev === 'undefined') ghost._inDecisionPrev = false;
+    const inDecisionZone = Math.abs(cx - centerX) < DECISION_RADIUS && Math.abs(cy - centerY) < DECISION_RADIUS;
+    const enteringDecisionZone = inDecisionZone && !ghost._inDecisionPrev; // true solo el primer frame al entrar a la zona de decisión
+
     // =============================
     // SALIDA DE LA CASA
     // =============================
@@ -870,26 +891,106 @@ function updateGhostAI(ghost, deltaTime) {
             }
             // Avanzar por el camino si existe
             if (ghost.path && ghost.path.length > 1 && ghost.pathIndex < ghost.path.length - 1) {
-                ghost.pathIndex++;
-                setDirectionFromNextTile(ghost, tileX, tileY, ghost.path[ghost.pathIndex]);
-            } else if (!ghost.path || ghost.path.length <= 1) {
-                // Si no hay camino, moverse aleatoriamente
-                const dirs = ['up', 'down', 'left', 'right'];
-                for (let i = dirs.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
-                }
-                for (const dir of dirs) {
-                    let dx = 0, dy = 0;
-                    if (dir === 'up') dy = -1;
-                    if (dir === 'down') dy = 1;
-                    if (dir === 'left') dx = -1;
-                    if (dir === 'right') dx = 1;
-                    if (canMove(tileX + dx, tileY + dy, ghost)) {
-                        ghost.direction = dir;
-                        ghost.animation = dir;
-                        break;
+                // early decision peek: make turn decisions slightly before center to avoid delay
+                if (enteringDecisionZone && ghost.path.length > ghost.pathIndex + 1) {
+                    const peekTile = ghost.path[ghost.pathIndex + 1];
+                    let peekDir = null;
+                    if (peekTile.x > tileX) peekDir = 'right';
+                    else if (peekTile.x < tileX) peekDir = 'left';
+                    else if (peekTile.y > tileY) peekDir = 'down';
+                    else if (peekTile.y < tileY) peekDir = 'up';
+
+                    if (peekDir === oppositeDirection(ghost.direction) && ghost.color !== 'red') {
+                        const dirDeltas = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+                        const [dxKeep, dyKeep] = dirDeltas[ghost.direction];
+                        if (canMove(tileX + dxKeep, tileY + dyKeep, ghost)) {
+                            ghost.animation = ghost.direction;
+                        } else {
+                            const candidates = ['up', 'down', 'left', 'right'].filter(d => d !== oppositeDirection(ghost.direction));
+                            let chosen = null;
+                            for (const dir of candidates) {
+                                const [dx, dy] = dirDeltas[dir];
+                                if (canMove(tileX + dx, tileY + dy, ghost)) { chosen = dir; break; }
+                            }
+                            if (chosen) { ghost.direction = chosen; ghost.animation = chosen; }
+                        }
                     }
+                }
+
+                // advance path only once when entering center
+                if (enteringCenter) {
+                    ghost.pathIndex++;
+
+                    // compute desired direction and avoid immediate U-turns for non-red ghosts
+                    const nextTile = ghost.path[ghost.pathIndex];
+                    let desiredDir = null;
+                    if (nextTile.x > tileX) desiredDir = 'right';
+                    else if (nextTile.x < tileX) desiredDir = 'left';
+                    else if (nextTile.y > tileY) desiredDir = 'down';
+                    else if (nextTile.y < tileY) desiredDir = 'up';
+
+                    if (desiredDir === oppositeDirection(ghost.direction) && ghost.color !== 'red') {
+                        // prefer to keep current direction if possible
+                        const dirDeltas = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+                        const [dxKeep, dyKeep] = dirDeltas[ghost.direction];
+                        if (canMove(tileX + dxKeep, tileY + dyKeep, ghost)) {
+                            ghost.animation = ghost.direction;
+                        } else {
+                            // choose first non-opposite valid direction
+                            const candidates = ['up', 'down', 'left', 'right'].filter(d => d !== oppositeDirection(ghost.direction));
+                            let chosen = null;
+                            for (const dir of candidates) {
+                                const [dx, dy] = dirDeltas[dir];
+                                if (canMove(tileX + dx, tileY + dy, ghost)) { chosen = dir; break; }
+                            }
+                            if (chosen) { ghost.direction = chosen; ghost.animation = chosen; }
+                            else { ghost.direction = desiredDir; ghost.animation = desiredDir; }
+                        }
+                    } else {
+                        setDirectionFromNextTile(ghost, tileX, tileY, nextTile);
+                    }
+                }
+            } else if (!ghost.path || ghost.path.length <= 1) {
+                // prefer directions that are not immediate reversals, but choose slightly earlier in the decision zone
+                if (enteringDecisionZone) {
+                    (function() {
+                        const allDirs = ['up', 'down', 'left', 'right'];
+                        const opp = oppositeDirection(ghost.direction);
+                        const preferred = allDirs.filter(d => d !== opp);
+
+                        for (let i = preferred.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [preferred[i], preferred[j]] = [preferred[j], preferred[i]];
+                        }
+
+                        let chosen = null;
+                        for (const dir of preferred) {
+                            let dx = 0, dy = 0;
+                            if (dir === 'up') dy = -1;
+                            if (dir === 'down') dy = 1;
+                            if (dir === 'left') dx = -1;
+                            if (dir === 'right') dx = 1;
+                            if (canMove(tileX + dx, tileY + dy, ghost)) { chosen = dir; break; }
+                        }
+
+                        // fall back to any direction (including opposite) if none in preferred
+                        if (!chosen) {
+                            for (let i = allDirs.length - 1; i > 0; i--) {
+                                const j = Math.floor(Math.random() * (i + 1));
+                                [allDirs[i], allDirs[j]] = [allDirs[j], allDirs[i]];
+                            }
+                            for (const dir of allDirs) {
+                                let dx = 0, dy = 0;
+                                if (dir === 'up') dy = -1;
+                                if (dir === 'down') dy = 1;
+                                if (dir === 'left') dx = -1;
+                                if (dir === 'right') dx = 1;
+                                if (canMove(tileX + dx, tileY + dy, ghost)) { chosen = dir; break; }
+                            }
+                        }
+
+                        if (chosen) { ghost.direction = chosen; ghost.animation = chosen; }
+                    })();
                 }
             }
         }
@@ -920,27 +1021,131 @@ function updateGhostAI(ghost, deltaTime) {
                 ghost.lastTarget = { ...pinkTarget };
             }
             if (ghost.path && ghost.path.length > 1 && ghost.pathIndex < ghost.path.length - 1) {
-                ghost.pathIndex++;
-                setDirectionFromNextTile(ghost, tileX, tileY, ghost.path[ghost.pathIndex]);
-            } else if (!ghost.path || ghost.path.length <= 1) {
-                // Si no hay camino, moverse aleatoriamente
-                const dirs = ['up', 'down', 'left', 'right'];
-                for (let i = dirs.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
-                }
-                for (const dir of dirs) {
-                    let dx = 0, dy = 0;
-                    if (dir === 'up') dy = -1;
-                    if (dir === 'down') dy = 1;
-                    if (dir === 'left') dx = -1;
-                    if (dir === 'right') dx = 1;
-                    if (canMove(tileX + dx, tileY + dy, ghost)) {
-                        ghost.direction = dir;
-                        ghost.animation = dir;
-                        break;
+                // early decision peek for pink ghost
+                if (enteringDecisionZone && ghost.path.length > ghost.pathIndex + 1) {
+                    const peekTile = ghost.path[ghost.pathIndex + 1];
+                    let peekDir = null;
+                    if (peekTile.x > tileX) peekDir = 'right';
+                    else if (peekTile.x < tileX) peekDir = 'left';
+                    else if (peekTile.y > tileY) peekDir = 'down';
+                    else if (peekTile.y < tileY) peekDir = 'up';
+
+                    if (peekDir === oppositeDirection(ghost.direction) && ghost.color !== 'red') {
+                        const dirDeltas = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+                        const [dxKeep, dyKeep] = dirDeltas[ghost.direction];
+                        if (canMove(tileX + dxKeep, tileY + dyKeep, ghost)) {
+                            ghost.animation = ghost.direction;
+                        } else {
+                            const candidates = ['up', 'down', 'left', 'right'].filter(d => d !== oppositeDirection(ghost.direction));
+                            let chosen = null;
+                            for (const dir of candidates) {
+                                const [dx, dy] = dirDeltas[dir];
+                                if (canMove(tileX + dx, tileY + dy, ghost)) { chosen = dir; break; }
+                            }
+                            if (chosen) { ghost.direction = chosen; ghost.animation = chosen; }
+                        }
                     }
                 }
+
+                if (enteringCenter) {
+                    ghost.pathIndex++;
+                    const nextTile = ghost.path[ghost.pathIndex];
+                    let desiredDir = null;
+                    if (nextTile.x > tileX) desiredDir = 'right';
+                    else if (nextTile.x < tileX) desiredDir = 'left';
+                    else if (nextTile.y > tileY) desiredDir = 'down';
+                    else if (nextTile.y < tileY) desiredDir = 'up';
+
+                    if (desiredDir === oppositeDirection(ghost.direction) && ghost.color !== 'red') {
+                        const dirDeltas = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+                        const [dxKeep, dyKeep] = dirDeltas[ghost.direction];
+                        if (canMove(tileX + dxKeep, tileY + dyKeep, ghost)) {
+                            ghost.animation = ghost.direction;
+                        } else {
+                            const candidates = ['up', 'down', 'left', 'right'].filter(d => d !== oppositeDirection(ghost.direction));
+                            let chosen = null;
+                            for (const dir of candidates) {
+                                const [dx, dy] = dirDeltas[dir];
+                                if (canMove(tileX + dx, tileY + dy, ghost)) { chosen = dir; break; }
+                            }
+                            if (chosen) { ghost.direction = chosen; ghost.animation = chosen; }
+                            else { ghost.direction = desiredDir; ghost.animation = desiredDir; }
+                        }
+                    } else {
+                        setDirectionFromNextTile(ghost, tileX, tileY, nextTile);
+                    }
+                }
+            } else if (!ghost.path || ghost.path.length <= 1) {
+                if (enteringDecisionZone) {
+                    // Prefer directions that are not immediate reversals of current heading
+                    (function() {
+                        const allDirs = ['up', 'down', 'left', 'right'];
+                        const opp = oppositeDirection(ghost.direction);
+                        const preferred = allDirs.filter(d => d !== opp);
+
+                        for (let i = preferred.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [preferred[i], preferred[j]] = [preferred[j], preferred[i]];
+                        }
+
+                        let chosen = null;
+                        for (const dir of preferred) {
+                            let dx = 0, dy = 0;
+                            if (dir === 'up') dy = -1;
+                            if (dir === 'down') dy = 1;
+                            if (dir === 'left') dx = -1;
+                            if (dir === 'right') dx = 1;
+                            if (canMove(tileX + dx, tileY + dy, ghost)) { chosen = dir; break; }
+                        }
+
+                        // fall back to any direction (including opposite) if none in preferred
+                        if (!chosen) {
+                            for (let i = allDirs.length - 1; i > 0; i--) {
+                                const j = Math.floor(Math.random() * (i + 1));
+                                [allDirs[i], allDirs[j]] = [allDirs[j], allDirs[i]];
+                            }
+                            for (const dir of allDirs) {
+                                let dx = 0, dy = 0;
+                                if (dir === 'up') dy = -1;
+                                if (dir === 'down') dy = 1;
+                                if (dir === 'left') dx = -1;
+                                if (dir === 'right') dx = 1;
+                                if (canMove(tileX + dx, tileY + dy, ghost)) { chosen = dir; break; }
+                            }
+                        }
+
+                        if (chosen) { ghost.direction = chosen; ghost.animation = chosen; }
+                    })();
+                }
+            }
+        }
+    }
+
+    // update centered prev flag to be used next frame
+    ghost._centeredPrev = isCentered;
+    ghost._inDecisionPrev = inDecisionZone;
+
+    // corridor-centering: align sprite perpendicular position to the tile when in decision zone
+    if (!ghost.exitingHouse && inDecisionZone) {
+        if (ghost.direction === 'left' || ghost.direction === 'right') {
+            const targetPy = tileY * TILE_SIZE; // top-left so center == tile center
+            // compute tiles that would be occupied after snapping
+            const testTop = Math.floor((targetPy + GHOST_INSET) / TILE_SIZE);
+            const testBottom = Math.floor((targetPy + TILE_SIZE - 1 - GHOST_INSET) / TILE_SIZE);
+            const testLeft = Math.floor((ghost.px + GHOST_INSET) / TILE_SIZE);
+            const testRight = Math.floor((ghost.px + TILE_SIZE - 1 - GHOST_INSET) / TILE_SIZE);
+            // snap only if snapping doesn't cause overlap with walls
+            if (canMove(testLeft, testTop, ghost) && canMove(testLeft, testBottom, ghost) && canMove(testRight, testTop, ghost) && canMove(testRight, testBottom, ghost)) {
+                ghost.py = targetPy;
+            }
+        } else if (ghost.direction === 'up' || ghost.direction === 'down') {
+            const targetPx = tileX * TILE_SIZE;
+            const testLeft = Math.floor((targetPx + GHOST_INSET) / TILE_SIZE);
+            const testRight = Math.floor((targetPx + TILE_SIZE - 1 - GHOST_INSET) / TILE_SIZE);
+            const testTop = Math.floor((ghost.py + GHOST_INSET) / TILE_SIZE);
+            const testBottom = Math.floor((ghost.py + TILE_SIZE - 1 - GHOST_INSET) / TILE_SIZE);
+            if (canMove(testLeft, testTop, ghost) && canMove(testRight, testTop, ghost) && canMove(testLeft, testBottom, ghost) && canMove(testRight, testBottom, ghost)) {
+                ghost.px = targetPx;
             }
         }
     }
@@ -959,10 +1164,10 @@ function updateGhostAI(ghost, deltaTime) {
         case 'down': nextPy += move; break;
     }
 
-    const left = Math.floor(nextPx / TILE_SIZE);
-    const right = Math.floor((nextPx + TILE_SIZE - 1) / TILE_SIZE);
-    const top = Math.floor(nextPy / TILE_SIZE);
-    const bottom = Math.floor((nextPy + TILE_SIZE - 1) / TILE_SIZE);
+    const left = Math.floor((nextPx + GHOST_INSET) / TILE_SIZE);
+    const right = Math.floor((nextPx + TILE_SIZE - 1 - GHOST_INSET) / TILE_SIZE);
+    const top = Math.floor((nextPy + GHOST_INSET) / TILE_SIZE);
+    const bottom = Math.floor((nextPy + TILE_SIZE - 1 - GHOST_INSET) / TILE_SIZE);
 
     let canX = true;
     let canY = true;
